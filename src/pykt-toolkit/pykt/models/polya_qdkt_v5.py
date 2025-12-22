@@ -1,0 +1,431 @@
+import torch
+from torch import nn
+import torch.nn.functional as F
+from enum import IntEnum
+import numpy as np
+from .que_base_model import QueBaseModel
+from pykt.utils import debug_print
+
+
+class Dim(IntEnum):
+    batch = 0
+    seq = 1
+    feature = 2
+
+
+# ------------------------------------------------------------------------------
+# 1. QueEmbedder (유지)
+# ------------------------------------------------------------------------------
+class QueEmbedder(nn.Module):
+    def __init__(
+        self, num_q, emb_size, emb_path, flag_load_emb, flag_emb_freezed, model_name
+    ):
+        super().__init__()
+        self.num_q = num_q
+        self.emb_size = emb_size
+        self.emb_path = emb_path.strip().strip('"').strip("'") if emb_path else ""
+        self.flag_load_emb = flag_load_emb
+        self.flag_emb_freezed = flag_emb_freezed
+        self.model_name = model_name
+        self.loaded_emb_dim = emb_size
+        self.num_stages = 4
+        self.has_stages = False
+        self.init_embedding_layer()
+        if self.loaded_emb_dim != self.emb_size:
+            self.projection_layer = nn.Linear(self.loaded_emb_dim, self.emb_size)
+        else:
+            self.projection_layer = nn.Identity()
+
+    def init_embedding_layer(self):
+        if self.emb_path == "" or not self.flag_load_emb:
+            debug_print(
+                f"Standard Random Embeddings (No Stages).", fuc_name=self.model_name
+            )
+            self.que_emb = nn.Embedding(self.num_q, self.emb_size)
+            self.has_stages = False
+        elif self.flag_load_emb:
+            debug_print(
+                f"Loading embeddings from: {self.emb_path}", fuc_name=self.model_name
+            )
+            if self.emb_path.endswith(".pt"):
+                precomputed_tensor = torch.load(self.emb_path, map_location="cpu")
+            else:
+                raise ValueError(f"Only .pt files supported.")
+            if precomputed_tensor.dim() == 3:
+                num_q_loaded, num_stages_loaded, self.loaded_emb_dim = (
+                    precomputed_tensor.shape
+                )
+                flattened_tensor = precomputed_tensor.reshape(
+                    num_q_loaded * self.num_stages, -1
+                )
+                freeze = True if self.flag_emb_freezed else False
+                self.que_emb = nn.Embedding.from_pretrained(
+                    flattened_tensor, freeze=freeze
+                )
+                self.has_stages = True
+                debug_print(f"Loaded 4-Stage Embeddings.", fuc_name=self.model_name)
+            elif precomputed_tensor.dim() == 2:
+                self.que_emb = nn.Embedding.from_pretrained(
+                    precomputed_tensor, freeze=self.flag_emb_freezed
+                )
+                self.has_stages = False
+                self.loaded_emb_dim = precomputed_tensor.shape[1]
+
+    def forward(self, q):
+        if not self.has_stages:
+            x = self.que_emb(q)
+            x = self.projection_layer(x)
+            return x, False
+        base_indices = q.unsqueeze(-1) * self.num_stages
+        offsets = torch.arange(self.num_stages, device=q.device).view(1, 1, -1)
+        stage_indices = base_indices + offsets
+        x = self.que_emb(stage_indices)
+        x = self.projection_layer(x)
+        return x, True
+
+
+# ------------------------------------------------------------------------------
+# 2. Fully Parallel MoE Projector (with Load Balancing Support)
+# ------------------------------------------------------------------------------
+class PolyaParallelMoE(nn.Module):
+    def __init__(self, input_dim, model_dim, dropout=0.1, top_k=1, state_dim=64):
+        super().__init__()
+        self.num_stages = 4
+        self.model_dim = model_dim
+        self.top_k = top_k
+        self.last_gate_weights = None
+
+        # 1. Experts
+        self.experts = nn.ModuleList(
+            [
+                nn.Sequential(
+                    nn.Linear(input_dim, input_dim),
+                    nn.ReLU(),
+                    nn.Dropout(dropout),
+                    nn.Linear(input_dim, model_dim),
+                )
+                for _ in range(self.num_stages)
+            ]
+        )
+
+        # 2. Router Input Adapter
+        self.router_input_adapter = nn.Sequential(
+            nn.Linear(input_dim * self.num_stages, model_dim),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+        )
+
+        # 3. Router Gate
+        self.w_gate = nn.Linear(model_dim + state_dim, self.num_stages)
+
+        self.layer_norm = nn.LayerNorm(model_dim)
+        self.simple_projector = nn.Linear(input_dim, model_dim)
+
+    def get_smart_summary(self, q_raw_seq):
+        batch_size, seq_len, _, _ = q_raw_seq.shape
+        q_flattened = q_raw_seq.view(batch_size, seq_len, -1)
+        return self.router_input_adapter(q_flattened)
+
+    def forward(self, q_raw_seq, m_seq, has_stages):
+        if not has_stages:
+            self.last_gate_weights = None
+            return self.simple_projector(q_raw_seq), None  # gate_probs is None
+
+        # [1] Precompute Experts (Parallel)
+        expert_outputs = []
+        for k in range(self.num_stages):
+            out = self.experts[k](q_raw_seq[:, :, k, :])
+            expert_outputs.append(out)
+        experts_stacked = torch.stack(expert_outputs, dim=2)
+
+        # [2] Prepare Router Input (Parallel)
+        q_summary = self.get_smart_summary(q_raw_seq)
+        router_input = torch.cat([q_summary, m_seq], dim=-1)
+
+        # [3] Calculate Logits
+        gate_logits = self.w_gate(router_input)
+
+        if self.training:
+            # Training Noise for exploration
+            noise = torch.randn_like(gate_logits) * (1.0 / self.num_stages)
+            noisy_logits = gate_logits + noise
+        else:
+            noisy_logits = gate_logits
+
+        # ★ [추가] Load Balancing Loss를 위한 Softmax Probability 계산
+        gate_probs = F.softmax(noisy_logits, dim=-1)  # (B, S, 4)
+
+        # [4] Top-1 Selection
+        top_k_vals, top_k_indices = torch.topk(noisy_logits, self.top_k, dim=-1)
+        mask = torch.full_like(noisy_logits, float("-inf"))
+        mask.scatter_(2, top_k_indices, top_k_vals)
+        gate_weights = F.softmax(mask, dim=-1)
+
+        if not self.training:
+            self.last_gate_weights = gate_weights.detach().cpu()
+
+        # [5] Fusion
+        combined_q = (experts_stacked * gate_weights.unsqueeze(-1)).sum(dim=2)
+
+        # ★ gate_probs 반환 추가
+        return self.layer_norm(combined_q), gate_probs
+
+
+# ------------------------------------------------------------------------------
+# 3. PolyaInteractionEmbedderV5 (Supports Prob Passing)
+# ------------------------------------------------------------------------------
+class PolyaInteractionEmbedderV5(nn.Module):
+    def __init__(
+        self,
+        num_q,
+        raw_emb_size,
+        model_emb_size,
+        dropout,
+        emb_path,
+        flag_load_emb,
+        flag_emb_freezed,
+        model_name,
+    ):
+        super().__init__()
+        self.num_q = num_q
+        self.model_name = model_name
+        self.model_emb_size = model_emb_size
+        self.last_gate_probs = None  # ★ 저장소 초기화
+
+        self.que_emb = QueEmbedder(
+            num_q, raw_emb_size, emb_path, flag_load_emb, flag_emb_freezed, model_name
+        )
+
+        # [State Tracker]
+        self.state_dim = 64
+        self.input_reducer = nn.Linear(model_emb_size + model_emb_size, self.state_dim)
+        self.state_gru = nn.GRU(self.state_dim, self.state_dim, batch_first=True)
+        self.start_token_state = nn.Parameter(torch.zeros(1, 1, self.state_dim))
+
+        self.polya_projector = PolyaParallelMoE(
+            raw_emb_size, model_emb_size, dropout, top_k=1, state_dim=self.state_dim
+        )
+
+        self.projector_incorrect = nn.Linear(model_emb_size, model_emb_size)
+        self.projector_correct = nn.Linear(model_emb_size, model_emb_size)
+        self.response_emb = nn.Embedding(2, model_emb_size)
+
+        debug_print(
+            f"PolyaInteractionEmbedderV5 (Smart Proxy + Parallel + Balancing) initialized.",
+            fuc_name=model_name,
+        )
+
+    def forward(self, x):
+        batch_size, seq_len = x.shape
+        r_recovered = (x >= self.num_q).long()
+        q_recovered = x % self.num_q
+
+        # [Step 1] Bulk Lookup
+        q_raw_seq, has_stages = self.que_emb(q_recovered)
+        r_emb_seq = self.response_emb(r_recovered)
+
+        # [Step 2] Smart Proxy Generation
+        if has_stages:
+            q_proxy_seq = self.polya_projector.get_smart_summary(q_raw_seq)
+        else:
+            q_proxy_seq = self.polya_projector.simple_projector(q_raw_seq)
+
+        # [Step 3] Parallel State Tracking
+        interaction_seq = torch.cat([q_proxy_seq, r_emb_seq], dim=-1)
+        gru_input_seq = self.input_reducer(interaction_seq)
+        gru_input_shifted = torch.cat(
+            [
+                self.start_token_state.expand(batch_size, -1, -1),
+                gru_input_seq[:, :-1, :],
+            ],
+            dim=1,
+        )
+        m_seq, _ = self.state_gru(gru_input_shifted)
+
+        # [Step 4] Run MoE (Parallel)
+        # ★ gate_probs 수신 및 저장
+        q_fused_seq, gate_probs = self.polya_projector(q_raw_seq, m_seq, has_stages)
+        self.last_gate_probs = gate_probs  # 저장
+
+        # [Step 5] Dual Projection
+        emb_incorrect = self.projector_incorrect(q_fused_seq)
+        emb_correct = self.projector_correct(q_fused_seq)
+
+        r_mask = r_recovered.unsqueeze(-1).float()
+        final_emb = emb_correct * r_mask + emb_incorrect * (1 - r_mask)
+
+        return final_emb
+
+    def get_attention_weights(self):
+        return self.polya_projector.last_gate_weights
+
+
+# ------------------------------------------------------------------------------
+# 4. QDKTNet_Polya_V5 (유지)
+# ------------------------------------------------------------------------------
+class QDKTNetPolyaV5(nn.Module):
+    def __init__(
+        self,
+        num_q,
+        num_c,
+        raw_emb_size,
+        model_emb_size,
+        dropout=0.1,
+        emb_type="qaid",
+        emb_path="",
+        flag_load_emb=False,
+        flag_emb_freezed=False,
+        device="cpu",
+        **kwargs,
+    ):
+        super().__init__()
+        self.model_name = "polya_qdkt_v5"
+        self.num_q = num_q
+        self.num_c = num_c
+        self.emb_size = model_emb_size
+        self.hidden_size = model_emb_size
+        self.device = device
+
+        self.interaction_emb = PolyaInteractionEmbedderV5(
+            num_q,
+            raw_emb_size,
+            model_emb_size,
+            dropout,
+            emb_path,
+            flag_load_emb,
+            flag_emb_freezed,
+            self.model_name,
+        )
+
+        self.lstm_layer = nn.LSTM(self.emb_size, self.hidden_size, batch_first=True)
+        self.dropout_layer = nn.Dropout(dropout)
+        self.out_layer = nn.Linear(self.hidden_size, self.num_q)
+
+        debug_print(f"QDKTNetPolyaV5 initialized.", fuc_name=self.model_name)
+
+    def forward(self, q, c, r, data=None):
+        x = (q + self.num_q * r)[:, :-1]
+        xemb = self.interaction_emb(x)
+        h, _ = self.lstm_layer(xemb)
+        h = self.dropout_layer(h)
+        y = self.out_layer(h)
+        y = torch.sigmoid(y)
+        y = (y * F.one_hot(data["qshft"].long(), self.num_q)).sum(-1)
+        outputs = {"y": y}
+        return outputs
+
+    def get_attention_weights(self):
+        return self.interaction_emb.get_attention_weights()
+
+
+# ------------------------------------------------------------------------------
+# 5. PolyaQDKTV5 (Auxiliary Loss Added)
+# ------------------------------------------------------------------------------
+class PolyaQDKTV5(QueBaseModel):
+    def __init__(
+        self,
+        num_q,
+        num_c,
+        emb_size=100,
+        dropout=0.1,
+        emb_type="qid",
+        emb_path="",
+        flag_load_emb=False,
+        flag_emb_freezed=False,
+        pretrain_dim=768,
+        device="cpu",
+        seed=0,
+        **kwargs,
+    ):
+
+        model_name = "polya_qdkt_v5"
+        debug_print(f"Initializing PolyaQDKTV5 (With Aux Loss)...", fuc_name=model_name)
+
+        super().__init__(
+            model_name=model_name,
+            emb_type=emb_type,
+            emb_path=emb_path,
+            pretrain_dim=pretrain_dim,
+            device=device,
+            seed=seed,
+        )
+
+        raw_emb_size = pretrain_dim if flag_load_emb else emb_size
+        model_emb_size = emb_size
+
+        self.model = QDKTNetPolyaV5(
+            num_q=num_q,
+            num_c=num_c,
+            raw_emb_size=raw_emb_size,
+            model_emb_size=model_emb_size,
+            dropout=dropout,
+            emb_type=emb_type,
+            emb_path=emb_path,
+            flag_load_emb=flag_load_emb,
+            flag_emb_freezed=flag_emb_freezed,
+            device=device,
+        )
+        self.model = self.model.to(device)
+        self.emb_type = emb_type
+        self.loss_func = self._get_loss_func("binary_crossentropy")
+
+    def get_load_balancing_loss(self, gate_probs):
+        """
+        Calculates auxiliary loss to encourage balanced expert usage.
+        Target: Uniform distribution (1/N) across the batch.
+        """
+        if gate_probs is None:
+            return 0.0
+
+        # gate_probs: (Batch, Seq, Num_Experts)
+        # Flatten to (Total_Tokens, Num_Experts)
+        num_experts = gate_probs.size(-1)
+        gate_probs = gate_probs.view(-1, num_experts)
+
+        # Calculate actual usage (Mean probability per expert across batch)
+        expert_usage = gate_probs.mean(dim=0)  # (Num_Experts,)
+
+        # Target usage (Uniform)
+        target_usage = 1.0 / num_experts
+
+        # MSE Loss: Minimize variance from uniform
+        balance_loss = torch.sum((expert_usage - target_usage) ** 2)
+
+        return balance_loss
+
+    def train_one_step(self, data, process=True, return_all=False, weighted_loss=0):
+        outputs, data_new = self.predict_one_step(
+            data, return_details=True, process=process
+        )
+
+        # 1. Main Task Loss
+        main_loss = self.get_loss(
+            outputs["y"], data_new["rshft"], data_new["sm"], weighted_loss=weighted_loss
+        )
+
+        # 2. Auxiliary Load Balancing Loss
+        gate_probs = self.model.interaction_emb.last_gate_probs
+        if gate_probs is not None:
+            aux_loss = self.get_load_balancing_loss(gate_probs)
+            # Lambda = 0.01 (Coefficient for aux loss)
+            total_loss = main_loss + (0.01 * aux_loss)
+        else:
+            total_loss = main_loss
+
+        return outputs["y"], total_loss
+
+    def predict_one_step(
+        self, data, return_details=False, process=True, return_raw=False
+    ):
+        data_new = self.batch_to_device(data, process=process)
+        outputs = self.model(
+            data_new["cq"].long(), data_new["cc"], data_new["cr"].long(), data=data_new
+        )
+
+        if return_details:
+            return outputs, data_new
+        else:
+            return outputs["y"]
+
+    def get_attention_weights(self):
+        return self.model.get_attention_weights()

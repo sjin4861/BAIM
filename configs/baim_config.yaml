@@ -1,0 +1,91 @@
+project:
+  name: "BAIM"
+  version: "0.1.0"
+  description: "Behavior-Aware Item Modeling for Knowledge Tracing"
+
+data:
+  # NIPS34 dataset paths
+  nips34:
+    dataset_root: "NIPS34"
+    questions_json: "NIPS34/metadata/question_en.json"
+    images_root: "NIPS34/metadata/images"
+
+  # XES3G5M dataset paths
+  xes3g5m:
+    dataset_root: "XES3G5M"
+    questions_json: "XES3G5M/metadata/questions_en.json"
+    images_root: "XES3G5M/metadata/images"
+
+  # Output directories (BAIM pipeline structure)
+  solutions_dir: "data/solutions"                # JSONL files: reasoning text + metadata
+  solution_embeddings_dir: "data/solution_embeddings"  # Hidden vectors (per-stage)
+  question_embeddings_dir: "data/question_embeddings"  # Aggregated question-level vectors
+  verifications_dir: "data/verifications"        # Verification results: summary.json, details.jsonl
+
+# Prompt templates
+prompts:
+  template: "src/prompts/reasoning_template.yaml"
+
+# LLM settings
+llm:
+  # Model configuration
+  model: "Qwen/Qwen3-VL-32B-Thinking"  
+  base_url: "http://localhost:${VLLM_PORT:-8000}/v1"  # Port from env var, default 8000
+  api_key: "${OPENAI_API_KEY:-EMPTY}"
+  
+  # Generation parameters
+  temperature: 0.7
+  top_p: 0.9
+  repetition_penalty: 1.1
+  max_tokens: 12000  
+  timeout_s: 120
+  max_retries: 10
+  json_mode: true
+  
+  # Backend type: "openai" or "transformers"
+  backend: "transformers"
+  
+  # Transformers-specific settings (when backend="transformers")
+  transformers:
+    device: "cuda"
+    torch_dtype: "bfloat16"
+    trust_remote_code: true
+    extract_hidden: true 
+    hidden_layer: -1  # Which layer to extract (-1 = last layer)
+
+
+solution_generation:
+  # Number of solutions per question
+  num_samples_per_type: 1
+  
+  # Solution type: Only C (Correct reasoning) is used
+  types:
+    - "C"  # Correct reasoning only
+  
+  # Rescue retry for invalid JSON
+  rescue_retry: 1
+  
+  # Batch processing
+  batch_size: 8
+
+embedding:
+  hidden_dim: 5120  # For Qwen3-VL-32B-Thinking
+  # Aggregation method
+  aggregation_method: "mean"  # Options: "mean", "gnn"
+    # Save format
+  embedding_format: "pt"       # Vector format: "pt" (torch), "npz" (numpy compressed)
+  # Metadata
+  save_meta: true              # Save embeddings metadata (JSON)
+  meta_filename: "baim_question_meta.json"
+  
+  # Note: All vectors are stored in float32 for KT model compatibility
+
+# Verification settings
+verification:
+  fallback_method: "exact_match"  # Options: "exact_match", "numeric_tolerance", "symbolic"
+
+# Logging
+logging:
+  runtime_log: "solver.log"
+  infer_log: "solver_infer.jsonl"
+  level: "INFO"

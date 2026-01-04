@@ -99,14 +99,14 @@ def init_dataset4train(
 ):
     """Initialize training and validation datasets.
 
-    Simplified for 5 Polya models (polya_akt_v5, polya_qdkt_v5, polya_simplekt_v5,
-    polya_qikt_v5, polya_sparsekt_v5) which all use KTQueDataset.
+    Simplified for 5 BAIM models (akt_baim, qdkt_baim, simplekt_baim,
+    qikt_baim, sparsekt_baim) which all use KTQueDataset.
     """
     print(f"dataset_name: {dataset_name}, model_name: {model_name}, fold: {i}")
     data_config = data_config[dataset_name]
     all_folds = set(data_config["folds"])
 
-    # All 5 Polya models use KTQueDataset (question-level datasets)
+    # All 5 BAIM models use KTQueDataset (question-level datasets)
     if model_name in que_type_models:
         curvalid = KTQueDataset(
             os.path.join(

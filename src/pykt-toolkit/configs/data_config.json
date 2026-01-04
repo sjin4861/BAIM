@@ -414,7 +414,7 @@
         "test_original_file_quelevel": "test_quelevel.csv"
     },
     "nips_task34": {
-        "dpath": "/home/sjin4861/pykt-toolkit/data/nips_task34",
+        "dpath": "data/nips_task34",
         "num_q": 948,
         "num_c": 57,
         "input_type": [

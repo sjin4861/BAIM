@@ -6,7 +6,14 @@ from torch.nn.utils.clip_grad import clip_grad_norm_
 import numpy as np
 from .evaluate_model import evaluate, evaluate_cskt
 from torch.autograd import Variable, grad
-from .atkt import _l2_normalize_adv
+try:
+    from .atkt import _l2_normalize_adv
+except ModuleNotFoundError:  # optional dependency; only needed for ATKT variants
+
+    def _l2_normalize_adv(*_args, **_kwargs):
+        raise ModuleNotFoundError(
+            "pykt.models.atkt is not available; ATKT adversarial training cannot run."
+        )
 from ..utils.utils import debug_print
 from pykt.config import que_type_models
 import pandas as pd

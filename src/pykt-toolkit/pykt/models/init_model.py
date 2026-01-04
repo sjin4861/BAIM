@@ -2,11 +2,11 @@ import torch
 import numpy as np
 import os
 
-from .polya_qdkt_v5 import PolyaQDKTV5  # [추가] V5 모델 Import
-from .polya_akt_v5 import PolyaAKTV5  # [추가]
-from .polya_simplekt_v5 import PolyaSimpleKTV5  # [추가] 임포트
-from .polya_qikt_v5 import PolyaQIKTV5  # [추가] 임포트
-from .polya_sparsekt_v5 import PolyaSparseKTV5  # [추가] 임포트
+from .qdkt_baim import QDKTBAIM
+from .akt_baim import AKTBAIM
+from .simplekt_baim import SimpleKTBAIM
+from .qikt_baim import QIKTBAIM
+from .sparsekt_baim import SparseKTBAIM
 
 
 def get_device():
@@ -23,20 +23,17 @@ device = get_device()
 
 
 def init_model(model_name, model_config, data_config, emb_type):
-    if model_name == "polya_qdkt_v5":
-        model = PolyaQDKTV5(
+    if model_name == "qdkt_baim":
+        model = QDKTBAIM(
             num_q=data_config["num_q"],
-            num_c=data_config["num_c"],
             **model_config,
             emb_type=emb_type,
             emb_path=data_config["emb_path"],
             device=device,
         ).to(device)
-    elif model_name == "polya_akt_v5":
-        model = PolyaAKTV5(
+    elif model_name == "akt_baim":
+        model = AKTBAIM(
             num_q=data_config["num_q"],
-            num_c=data_config["num_c"],
-            # AKT config parameters
             emb_size=model_config.get("emb_size", 256),
             n_blocks=model_config.get("n_blocks", 1),
             dropout=model_config.get("dropout", 0.1),
@@ -54,10 +51,10 @@ def init_model(model_name, model_config, data_config, emb_type):
             pretrain_dim=model_config.get("pretrain_dim", 768),
             device=device,
         ).to(device)
-    elif model_name == "polya_simplekt_v5":
-        model = PolyaSimpleKTV5(
+    elif model_name == "simplekt_baim":
+        model = SimpleKTBAIM(
             n_question=data_config["num_q"],
-            n_pid=0,  # SimpleKT는 pid 사용 안 함 (보통 0으로 처리)
+            n_pid=0,
             # SimpleKT specific params
             d_model=model_config.get("d_model", 256),
             n_blocks=model_config.get("n_blocks", 1),
@@ -78,8 +75,8 @@ def init_model(model_name, model_config, data_config, emb_type):
             pretrain_dim=model_config.get("pretrain_dim", 768),
             device=device,
         ).to(device)
-    elif model_name == "polya_qikt_v5":
-        model = PolyaQIKTV5(
+    elif model_name == "qikt_baim":
+        model = QIKTBAIM(
             num_q=data_config["num_q"],
             num_c=data_config["num_c"],
             # QIKT specific params
@@ -95,11 +92,11 @@ def init_model(model_name, model_config, data_config, emb_type):
             pretrain_dim=model_config.get("pretrain_dim", 768),
             device=device,
         ).to(device)
-    elif model_name == "polya_sparsekt_v5":
-        model = PolyaSparseKTV5(
+    elif model_name == "sparsekt_baim":
+        model = SparseKTBAIM(
             n_question=data_config["num_q"],
-            n_pid=0,  # SparseKT도 보통 pid 미사용
-            # SparseKT specific params
+            n_pid=0,
+            # SparseKT specific params``
             d_model=model_config.get("d_model", 256),
             n_blocks=model_config.get("n_blocks", 2),
             dropout=model_config.get("dropout", 0.1),

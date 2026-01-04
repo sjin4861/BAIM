@@ -26,11 +26,11 @@ que_type_models = [
     "neuro_cognitive_qdkt",
     "neuro_cognitive_transformer",
     "cp_qikt",
-    "polya_akt_v5",
-    "polya_qdkt_v5",
-    "polya_simplekt_v5",
-    "polya_qikt_v5",
-    "polya_sparsekt_v5",
+    "akt_baim",
+    "qdkt_baim",
+    "simplekt_baim",
+    "qikt_baim",
+    "sparsekt_baim",
 ]
 
 qikt_ab_models = [
@@ -67,11 +67,11 @@ dict_baseline_to_model = {
     "neuro_cognitive_qdkt": "neuro_cognitive_qdkt",
     "neuro_cognitive_transformer": "neuro_cognitive_transformer",
     "cp_qikt": "cp_qikt",
-    "polya_akt_v5": "polya_akt_v5",
-    "polya_qdkt_v5": "polya_qdkt_v5",
-    "polya_simplekt_v5": "polya_simplekt_v5",
-    "polya_qikt_v5": "polya_qikt_v5",
-    "polya_sparsekt_v5": "polya_sparsekt_v5",
+    "akt_baim": "akt_baim",
+    "qdkt_baim": "qdkt_baim",
+    "simplekt_baim": "simplekt_baim",
+    "qikt_baim": "qikt_baim",
+    "sparsekt_baim": "sparsekt_baim",
 }
 
 # Reversing the above dictionary

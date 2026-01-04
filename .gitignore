@@ -210,4 +210,4 @@ __marimo__/
 wandb/
 
 images/
-.tmp/
+.tmp/.DS_Store

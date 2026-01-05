@@ -141,15 +141,16 @@ class BAIMParallelMoE(nn.Module):
 
         p_t = F.softmax(alpha_t_noisy, dim=-1)
 
-        top_k_vals, top_k_indices = torch.topk(noisy_logits, self.top_k, dim=-1)
-        mask = torch.full_like(noisy_logits, float("-inf"))
+        # Select top-k experts based on gate logits (alpha_t_noisy)
+        top_k_vals, top_k_indices = torch.topk(alpha_t_noisy, self.top_k, dim=-1)
+        mask = torch.full_like(alpha_t_noisy, float("-inf"))
         mask.scatter_(2, top_k_indices, top_k_vals)
         gate_weights = F.softmax(mask, dim=-1)
 
         if not self.training:
-            self.last_gate_weights = routing_weights.detach().cpu()
+            self.last_gate_weights = gate_weights.detach().cpu()
 
-        I_t = (experts_stacked * routing_weights.unsqueeze(-1)).sum(dim=2)
+        I_t = (experts_stacked * gate_weights.unsqueeze(-1)).sum(dim=2)
 
         return self.layer_norm(I_t), p_t
 

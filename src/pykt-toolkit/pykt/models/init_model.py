@@ -26,9 +26,13 @@ def init_model(model_name, model_config, data_config, emb_type):
     if model_name == "qdkt_baim":
         model = QDKTBAIM(
             num_q=data_config["num_q"],
-            **model_config,
+            emb_size=model_config.get("emb_size", 256),
+            dropout=model_config.get("dropout", 0.1),
             emb_type=emb_type,
             emb_path=data_config["emb_path"],
+            flag_load_emb=model_config.get("flag_load_emb", False),
+            flag_emb_freezed=model_config.get("flag_emb_freezed", False),
+            pretrain_dim=model_config.get("pretrain_dim", 768),
             device=device,
         ).to(device)
     elif model_name == "akt_baim":
@@ -42,7 +46,6 @@ def init_model(model_name, model_config, data_config, emb_type):
             final_fc_dim=model_config.get("final_fc_dim", 512),
             num_attn_heads=model_config.get("num_attn_heads", 8),
             separate_qa=model_config.get("separate_qa", False),
-            l2=model_config.get("l2", 1e-5),
             # Polya config parameters
             emb_type=emb_type,
             emb_path=data_config["emb_path"],
@@ -66,7 +69,6 @@ def init_model(model_name, model_config, data_config, emb_type):
             final_fc_dim2=model_config.get("final_fc_dim2", 256),
             seq_len=model_config.get("seq_len", 200),
             separate_qa=model_config.get("separate_qa", False),
-            l2=model_config.get("l2", 1e-5),
             # Polya params
             emb_type=emb_type,
             emb_path=data_config["emb_path"],
@@ -107,7 +109,6 @@ def init_model(model_name, model_config, data_config, emb_type):
             final_fc_dim2=model_config.get("final_fc_dim2", 256),
             seq_len=model_config.get("seq_len", 200),
             separate_qa=model_config.get("separate_qa", False),
-            l2=model_config.get("l2", 1e-5),
             # Sparse Attention Params
             sparse_ratio=model_config.get("sparse_ratio", 0.8),
             k_index=model_config.get("k_index", 5),

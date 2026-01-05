@@ -16,17 +16,15 @@ import uuid
 
 
 def get_device():
-    if torch.backends.mps.is_available():  # Check for Apple Silicon GPU support
+    if torch.backends.mps.is_available():
         return torch.device("mps")
-    elif torch.cuda.is_available():  # Check for CUDA GPU support
+    elif torch.cuda.is_available():
         return torch.device("cuda")
-    else:  # Fallback to CPU if neither MPS nor CUDA is available
+    else:
         return torch.device("cpu")
 
 
-# os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
 device = get_device()
-# os.environ['CUBLAS_WORKSPACE_CONFIG']=':4096:2'
 
 
 def save_config(train_config, model_config, data_config, params, save_dir):
@@ -43,7 +41,6 @@ def save_config(train_config, model_config, data_config, params, save_dir):
 
 def main(params):
     print("HEYYYY The device is", device)
-    # Some param initializations to ensure compatibility
     if "train_subset_rate" not in params:
         params["train_subset_rate"] = 1
     if "use_wandb" not in params:
@@ -60,9 +57,7 @@ def main(params):
         emb = params.get("emb_type", "emb")
         fold = params.get("fold", 0)
 
-        # 예: akt_que_xes3g5m_qid_fold0
         run_name = f"{model}_{dataset}_{emb}_fold{fold}"
-        # 3) add_uuid == 1 이면 짧은 UUID 붙여서 유니크하게
         if params.get("add_uuid", 1) == 1:
             short_uid = uuid.uuid4().hex[:6]
             run_name = f"{run_name}_{short_uid}"
@@ -98,9 +93,9 @@ def main(params):
             "skvmn",
             "dimkt",
         ]:
-            train_config["batch_size"] = 64  ## because of OOM
+            train_config["batch_size"] = 64
         if model_name in ["simplekt", "bakt_time", "sparsekt"]:
-            train_config["batch_size"] = 64  ## because of OOM
+            train_config["batch_size"] = 64
         if model_name in ["gkt"]:
             train_config["batch_size"] = 16
         if model_name in ["qdkt", "qikt"] and dataset_name in [
@@ -118,15 +113,12 @@ def main(params):
             "seed",
         ]:
             del model_config[key]
-        # Emb_path should be read from data_config.
-        # data_config is later updated based on the params["emb_path"].
         if "emb_path" in model_config:
             del model_config["emb_path"]
         if "batch_size" in params:
             train_config["batch_size"] = params["batch_size"]
         if "num_epochs" in params:
             train_config["num_epochs"] = params["num_epochs"]
-        # model_config = {"d_model": params["d_model"], "n_blocks": params["n_blocks"], "dropout": params["dropout"], "d_ff": params["d_ff"]}
     batch_size, num_epochs, optimizer = (
         train_config["batch_size"],
         train_config["num_epochs"],
@@ -135,10 +127,9 @@ def main(params):
 
     with open("../configs/data_config.json") as fin:
         data_config = json.load(fin)
-        # if emb_path is given, overwrite the path in data_config
         if "emb_path" in params and params["emb_path"] != "":
             data_config[dataset_name]["emb_path"] = params["emb_path"]
-    if "maxlen" in data_config[dataset_name]:  # prefer to use the maxlen in data config
+    if "maxlen" in data_config[dataset_name]:
         train_config["seq_len"] = data_config[dataset_name]["maxlen"]
     seq_len = train_config["seq_len"]
 
@@ -189,14 +180,12 @@ def main(params):
     print(f"train_config: {train_config}")
 
     if model_name in ["dimkt"]:
-        # del model_config['num_epochs']
         del model_config["weight_decay"]
 
     save_config(
         train_config, model_config, data_config[dataset_name], params, ckpt_path
     )
 
-    # Do the save for wandb
     if params["use_wandb"] == 1:
         wandb.config.update(params)
         wandb.config.update({"checkpoint_path": ckpt_path})
@@ -285,7 +274,6 @@ def main(params):
         best_model = init_model(
             model_name, model_config, data_config[dataset_name], emb_type
         )
-        # net = torch.load(os.path.join(ckpt_path, emb_type+"_model.ckpt"))
         net = torch.load(os.path.join(ckpt_path, model_name + "_model.ckpt"))
         best_model.load_state_dict(net)
 
@@ -316,7 +304,6 @@ def main(params):
         + "\t"
         + str(dict_res["best_epoch"])
     )
-    # model_save_path = os.path.join(ckpt_path, emb_type + "_model.ckpt")
     model_save_path = os.path.join(ckpt_path, model_name + "_model.ckpt")
     print(f"end:{datetime.datetime.now()}")
 

@@ -7,16 +7,58 @@ This repository contains BAIM (Behavior-Aware Item Modeling) models and utilitie
 
 - BAIM KT models (PyKT toolkit fork): `akt_baim`, `qdkt_baim`, `qikt_baim`, `simplekt_baim`, `sparsekt_baim`
 
-## Environment (uv)
+## Environment
 
-This project is configured for Python `3.12.*` and uses `uv`.
+- Python 3.12 with a repo-local virtualenv at `.venv`.
+- Managed via `uv`.
+
+Set up the environment:
 
 ```bash
 uv sync
 ```
 
-Run any command via:
+Verify:
 
 ```bash
 uv run python -c "import torch; print(torch.__version__)"
+```
+
+All training scripts auto-activate `.venv` and run on a single GPU sequentially across folds (0→4).
+
+## Data
+
+- Dataset files are under `src/pykt-toolkit/data/nips_task34`.
+- Config resolves data with `dpath = ../data/nips_task34` relative to `src/pykt-toolkit/train_test`.
+
+## Embeddings
+
+Place the BAIM embedding file here:
+
+- `embedding/nips_task34/polya_tensor_all_layers_mean_pca768.pt`
+
+The run scripts reference:
+
+- `EMB_PATH="../../../embedding/${DATASET}/polya_tensor_all_layers_mean_pca768.pt"`
+
+If you use a different dataset (e.g., `xes3g5m`), set `DATASET` accordingly or adjust folder names under `embedding/`.
+
+## Training
+
+From the repo root, run any of the following:
+
+```bash
+bash src/pykt-toolkit/train_test/run_akt_baim.sh
+bash src/pykt-toolkit/train_test/run_qdkt_baim.sh
+bash src/pykt-toolkit/train_test/run_qikt_baim.sh
+bash src/pykt-toolkit/train_test/run_simplekt_baim.sh
+bash src/pykt-toolkit/train_test/run_sparsekt_baim.sh
+```
+
+Notes:
+- Each script loops folds `0 1 2 3 4` serially on `CUDA_VISIBLE_DEVICES=0`.
+- Weights & Biases logging is enabled; set your API key if needed:
+
+```bash
+export WANDB_API_KEY="<your_key>"
 ```

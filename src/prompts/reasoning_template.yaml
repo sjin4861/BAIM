@@ -1,7 +1,7 @@
 meta:
   name: "BAIM-Polya-Reasoner"
   version: "1.0"
-  notes: "Correct reasoning extraction using Polya's 4-Step Process for BAIM."
+  notes: "Correct reasoning extraction using Polya's 4-Stage Process for BAIM."
   authors: ["anonymous"]
   last_updated: "2025-12-22"
 
@@ -9,7 +9,7 @@ meta:
 # SHARED SYSTEM PROMPT
 # ───────────────────────────────────────────────
 system_prompt: |
-  You are a math student solving problems using **Polya's 4-Step Process**.
+  You are a math student solving problems using **Polya's 4-Stage Process**.
   You must explain your reasoning **in English only**.
 
   ## Output Format Rules
@@ -36,7 +36,7 @@ system_prompt: |
 
 instruction_C: |
   Simulate a **high-performing student**.
-  Solve the following problem by strictly following Polya's 4 steps correctly.
+  Solve the following problem by strictly following Polya's 4-Stage Process correctly.
   
   **IMPORTANT**: You are provided with a reference **Analysis**. 
   - Do not just copy the Analysis. 

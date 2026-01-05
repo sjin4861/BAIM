@@ -132,7 +132,7 @@ class BAIMParallelMoE(nn.Module):
         s_t = self.get_smart_summary(stage_repr_seq)
         routing_input = torch.cat([s_t, m_seq], dim=-1)
 
-        gate_logits = self.w_gate(router_input)
+        gate_logits = self.w_gate(routing_input)
 
         if self.training:
             noise = torch.randn_like(gate_logits) * (1.0 / self.num_stages)
@@ -140,10 +140,10 @@ class BAIMParallelMoE(nn.Module):
         else:
             noisy_logits = gate_logits
 
-        p_t = F.softmax(alpha_t_noisy, dim=-1)
+        p_t = F.softmax(noisy_logits, dim=-1)
 
-        top_k_vals, top_k_indices = torch.topk(alpha_t_noisy, self.top_k, dim=-1)
-        mask = torch.full_like(alpha_t_noisy, float("-inf"))
+        top_k_vals, top_k_indices = torch.topk(noisy_logits, self.top_k, dim=-1)
+        mask = torch.full_like(noisy_logits, float("-inf"))
         mask.scatter_(2, top_k_indices, top_k_vals)
         routing_weights = F.softmax(mask, dim=-1)
 

@@ -133,7 +133,7 @@ class BAIMParallelMoE(nn.Module):
         experts_stacked = torch.stack(expert_outputs, dim=2)
 
         s_t = self.get_smart_summary(stage_repr_seq)
-        router_input = torch.cat([q_summary, m_seq], dim=-1)
+        router_input = torch.cat([s_t, m_seq], dim=-1)
 
         gate_logits = self.w_gate(router_input)
 

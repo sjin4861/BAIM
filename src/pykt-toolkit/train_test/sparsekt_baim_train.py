@@ -54,7 +54,6 @@ if __name__ == "__main__":
     parser.add_argument("--start", type=int, default=50)
     parser.add_argument("--kq_same", type=int, default=1)
     parser.add_argument("--separate_qa", type=int, default=0)
-    parser.add_argument("--l2", type=float, default=1e-5)
 
     parser.add_argument("--use_wandb", type=int, default=1)
     parser.add_argument("--add_uuid", type=int, default=1)

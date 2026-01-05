@@ -59,7 +59,6 @@ if __name__ == "__main__":
         default=1,
         help="Whether key and query projections are the same",
     )
-    parser.add_argument("--l2", type=float, default=1e-5, help="L2 regularization")
     parser.add_argument("--separate_qa", action="store_true", default=False)
 
     parser.add_argument("--use_wandb", type=int, default=1)

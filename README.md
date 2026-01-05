@@ -48,11 +48,12 @@ If you use a different dataset (e.g., `xes3g5m`), set `DATASET` accordingly or a
 From the repo root, run any of the following:
 
 ```bash
-bash src/pykt-toolkit/train_test/run_akt_baim.sh
-bash src/pykt-toolkit/train_test/run_qdkt_baim.sh
-bash src/pykt-toolkit/train_test/run_qikt_baim.sh
-bash src/pykt-toolkit/train_test/run_simplekt_baim.sh
-bash src/pykt-toolkit/train_test/run_sparsekt_baim.sh
+cd src/pykt-toolkit/train_test
+./run_akt_baim.sh
+./run_qdkt_baim.sh
+./run_qikt_baim.sh
+./run_simplekt_baim.sh
+./run_sparsekt_baim.sh
 ```
 
 Notes:

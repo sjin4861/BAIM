@@ -45,19 +45,40 @@ If you use a different dataset (e.g., `xes3g5m`), set `DATASET` accordingly or a
 
 ## Training
 
-From the repo root, run any of the following:
+From the repo root:
 
 ```bash
 cd src/pykt-toolkit/train_test
-./run_akt_baim.sh
-./run_qdkt_baim.sh
-./run_qikt_baim.sh
-./run_simplekt_baim.sh
-./run_sparsekt_baim.sh
 ```
+
+Train one architecture across 5 folds:
+
+```bash
+./run_qdkt_baim.sh
+# or: ./run_akt_baim.sh, ./run_qikt_baim.sh, ./run_simplekt_baim.sh, ./run_sparsekt_baim.sh
+```
+
+Run prediction/evaluation for all fold checkpoints at once:
+
+```bash
+uv run python -m wandb_predict --save_dir saved_model/qdkt
+# replace qdkt with: akt, qikt, simplekt, sparsekt
+```
+
+If your dataset does not have window split files, run:
+
+```bash
+uv run python -m wandb_predict --save_dir saved_model/qdkt --skip_window_eval 1
+```
+
+The command above evaluates all fold subdirectories under `saved_model/<model>` and prints
+`testauc mean +- std` in the terminal. It also saves a summary file at:
+
+- `saved_model/<model>/prediction_results_summary.json`
 
 Notes:
 - Each script loops folds `0 1 2 3 4` serially on `CUDA_VISIBLE_DEVICES=0`.
+- `wandb_predict` auto-disables window evaluation when window files are missing.
 - Weights & Biases logging is enabled; set your API key if needed:
 
 ```bash

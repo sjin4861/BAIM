@@ -17,6 +17,7 @@ export CUDA_VISIBLE_DEVICES=0
 DATASET="nips_task34"
 MODEL="simplekt_baim"
 EMB_TYPE="qid"
+ARCH_NAME="${MODEL%_baim}"
 
 SEED=42
 DROPOUT=0.1
@@ -32,7 +33,8 @@ ADD_UUID=1
 WANDB_PROJECT="${DATASET}_${MODEL}_all_layers_mean"
 
 EMB_PATH="../../../embedding/${DATASET}/polya_tensor_all_layers_mean_pca768.pt"
-SAVE_DIR="./saved_model"
+SAVE_DIR="./saved_model/${ARCH_NAME}"
+mkdir -p "${SAVE_DIR}"
 
 echo "===================================================="
 echo " [SimpleKT-BAIM] All Layers Mean Pooling Embedding"

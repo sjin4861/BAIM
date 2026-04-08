@@ -212,3 +212,9 @@ wandb/
 images/
 .tmp/
 .DS_Store
+
+# Dataset pickles
+src/pykt-toolkit/data/nips_task34/*.pkl
+
+# Saved models
+src/pykt-toolkit/train_test/saved_model/

@@ -2,9 +2,17 @@ import os
 import argparse
 import json
 import copy
+import glob
+import shutil
+import sys
 import torch
 import pandas as pd
 import numpy as np
+
+CUR_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.abspath(os.path.join(CUR_DIR, ".."))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
 
 from pykt.models import evaluate, evaluate_question, load_model
 from pykt.datasets import init_test_datasets
@@ -45,6 +53,34 @@ try:
         wandb_config = json.load(fin)
 except FileNotFoundError:
     wandb_config = {"api_key": ""}
+
+
+def ensure_expected_ckpt(save_dir, emb_type):
+    expected_ckpt = os.path.join(save_dir, f"{emb_type}_model.ckpt")
+    if os.path.isfile(expected_ckpt):
+        return
+
+    ckpt_candidates = sorted(glob.glob(os.path.join(save_dir, "*.ckpt")))
+    if not ckpt_candidates:
+        return
+
+    preferred = [
+        path
+        for path in ckpt_candidates
+        if emb_type in os.path.basename(path) or os.path.basename(path).endswith("_model.ckpt")
+    ]
+    source_ckpt = preferred[0] if preferred else ckpt_candidates[0]
+
+    try:
+        os.symlink(os.path.basename(source_ckpt), expected_ckpt)
+        print(
+            f"[ckpt-fallback] Linked {os.path.basename(source_ckpt)} -> {os.path.basename(expected_ckpt)}"
+        )
+    except OSError:
+        shutil.copy2(source_ckpt, expected_ckpt)
+        print(
+            f"[ckpt-fallback] Copied {os.path.basename(source_ckpt)} -> {os.path.basename(expected_ckpt)}"
+        )
 
 
 def save_detailed_predictions(model, test_loader, save_path, model_name):
@@ -91,20 +127,7 @@ def save_detailed_predictions(model, test_loader, save_path, model_name):
         print("Warning: No results extracted.")
 
 
-def main(params):
-    if params["use_wandb"] == 1:
-        import wandb
-
-        if "wandb_project_name" in params and params["wandb_project_name"] != "":
-            wandb.init(project=params["wandb_project_name"])
-        else:
-            wandb.init()
-
-    save_dir, batch_size, fusion_type = (
-        params["save_dir"],
-        params["bz"],
-        params["fusion_type"].split(","),
-    )
+def predict_for_one_dir(save_dir, batch_size, fusion_type, params):
 
     with open(os.path.join(save_dir, "config.json")) as fin:
         config = json.load(fin)
@@ -144,6 +167,28 @@ def main(params):
         elif model_name == "lpkt":
             data_config["num_at"] = config["data_config"]["num_at"]
             data_config["num_it"] = config["data_config"]["num_it"]
+
+    skip_window_eval = params.get("skip_window_eval", 0) == 1
+    if model_name in que_type_models:
+        window_key = "test_window_file_quelevel"
+        base_key = "test_file_quelevel"
+    else:
+        window_key = "test_window_file"
+        base_key = "test_file"
+
+    window_path = None
+    if window_key in data_config:
+        window_path = os.path.join(data_config["dpath"], data_config[window_key])
+
+    if window_path is not None and not os.path.exists(window_path):
+        print(
+            f"[window-fallback] Missing window file: {window_path}. Disable window evaluation."
+        )
+        skip_window_eval = True
+        if base_key in data_config:
+            # Keep dataset initialization alive even when window split is absent.
+            data_config[window_key] = data_config[base_key]
+
     if "emb_path" in trained_params:
         data_config["emb_path"] = trained_params["emb_path"]
     if model_name not in ["dimkt"]:
@@ -168,6 +213,7 @@ def main(params):
         f"Start predicting model: {model_name}, embtype: {emb_type}, save_dir: {save_dir}, dataset_name: {dataset_name}"
     )
 
+    ensure_expected_ckpt(save_dir, emb_type)
     model = load_model(model_name, model_config, data_config, emb_type, save_dir)
     detailed_save_path = os.path.join(save_dir, "detailed_test_predictions.csv")
     save_detailed_predictions(model, test_loader, detailed_save_path, model_name)
@@ -195,16 +241,23 @@ def main(params):
             save_dir, model.emb_type + "_test_window_predictions.txt"
         )
 
-    if model.model_name == "rkt":
-        window_testauc, window_testavg_prc, window_testacc = evaluate(
-            model, test_window_loader, model_name, None, save_path=save_test_window_path
-        )
+    if skip_window_eval:
+        print("Skip window evaluation.")
     else:
-        window_testauc, window_testavg_prc, window_testacc = evaluate(
-            model, test_window_loader, model_name, save_path=save_test_window_path
-        )
+        if model.model_name == "rkt":
+            window_testauc, window_testavg_prc, window_testacc = evaluate(
+                model,
+                test_window_loader,
+                model_name,
+                None,
+                save_path=save_test_window_path,
+            )
+        else:
+            window_testauc, window_testavg_prc, window_testacc = evaluate(
+                model, test_window_loader, model_name, save_path=save_test_window_path
+            )
 
-    print(f"window_testauc: {window_testauc}, window_testacc: {window_testacc}")
+        print(f"window_testauc: {window_testauc}, window_testacc: {window_testacc}")
 
     dres = {
         "testauc": testauc,
@@ -242,6 +295,94 @@ def main(params):
     with open(results_save_path, "w") as json_file:
         json.dump(dres, json_file, indent=2)
 
+    return dres
+
+
+def get_fold_dirs(parent_dir):
+    child_dirs = []
+    for name in sorted(os.listdir(parent_dir)):
+        path = os.path.join(parent_dir, name)
+        if os.path.isdir(path) and os.path.isfile(os.path.join(path, "config.json")):
+            child_dirs.append(path)
+    return child_dirs
+
+
+def read_fold_index(save_dir):
+    config_path = os.path.join(save_dir, "config.json")
+    try:
+        with open(config_path) as fin:
+            config = json.load(fin)
+        return config.get("params", {}).get("fold", -1)
+    except Exception:
+        return -1
+
+
+def main(params):
+    if params["use_wandb"] == 1:
+        import wandb
+
+        if "wandb_project_name" in params and params["wandb_project_name"] != "":
+            wandb.init(project=params["wandb_project_name"])
+        else:
+            wandb.init()
+
+    save_dir = params["save_dir"]
+    batch_size = params["bz"]
+    fusion_type = params["fusion_type"].split(",")
+
+    single_config_path = os.path.join(save_dir, "config.json")
+    if os.path.isfile(single_config_path):
+        predict_for_one_dir(save_dir, batch_size, fusion_type, params)
+        return
+
+    if not os.path.isdir(save_dir):
+        raise FileNotFoundError(f"save_dir does not exist: {save_dir}")
+
+    fold_dirs = get_fold_dirs(save_dir)
+    if len(fold_dirs) == 0:
+        raise FileNotFoundError(
+            f"No fold directories with config.json found under: {save_dir}"
+        )
+
+    print(f"[aggregate] Found {len(fold_dirs)} fold directories under {save_dir}")
+    fold_results = []
+    for fold_dir in fold_dirs:
+        fold_idx = read_fold_index(fold_dir)
+        print(f"[aggregate] Running fold={fold_idx}, dir={fold_dir}")
+        dres = predict_for_one_dir(fold_dir, batch_size, fusion_type, params)
+        fold_results.append(
+            {
+                "fold": fold_idx,
+                "save_dir": fold_dir,
+                "testauc": float(dres.get("testauc", np.nan)),
+                "testacc": float(dres.get("testacc", np.nan)),
+                "window_testauc": float(dres.get("window_testauc", np.nan)),
+                "window_testacc": float(dres.get("window_testacc", np.nan)),
+            }
+        )
+
+    valid_testaucs = [x["testauc"] for x in fold_results if not np.isnan(x["testauc"])]
+    if len(valid_testaucs) == 0:
+        print("[aggregate] No valid testauc values found.")
+        return
+
+    testauc_mean = float(np.mean(valid_testaucs))
+    testauc_std = float(np.std(valid_testaucs))
+    print("\n[aggregate] testauc summary")
+    print(f"[aggregate] folds={len(valid_testaucs)}")
+    print(f"[aggregate] testauc mean+-std: {testauc_mean:.6f} +- {testauc_std:.6f}")
+
+    summary = {
+        "num_folds": len(valid_testaucs),
+        "testauc_mean": testauc_mean,
+        "testauc_std": testauc_std,
+        "fold_results": fold_results,
+    }
+    summary_path = os.path.join(save_dir, "prediction_results_summary.json")
+    with open(summary_path, "w") as fout:
+        json.dump(summary, fout, indent=2)
+    print(f"[aggregate] Saved summary to {summary_path}")
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -251,6 +392,7 @@ if __name__ == "__main__":
     parser.add_argument("--use_wandb", type=int, default=0)
     parser.add_argument("--save_all_preds", type=int, default=0)
     parser.add_argument("--wandb_project_name", type=str, default="")
+    parser.add_argument("--skip_window_eval", type=int, default=0)
 
     args = parser.parse_args()
     print(args)

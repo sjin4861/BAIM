@@ -1,0 +1,33 @@
+model_name: "Qwen/Qwen3-VL-32B-Thinking"
+dataset: "NIPS34"
+
+paths:
+  prompt_path: "src/prompts/reasoning_template.yaml"
+  save_dir: "data/{dataset}/solutions"
+  images_root: "{dataset}/metadata/images"
+
+generation:
+  temperature: 0.7
+  top_p: 0.9
+  repetition_penalty: 1.1
+  max_new_tokens: 12000
+  max_retry: 10
+  json_mode: true
+
+runtime:
+  backend: "transformers"
+  device: "cuda"
+  torch_dtype: "bfloat16"
+  seed: 42
+  trust_remote_code: true
+
+logging:
+  level: "INFO"
+  runtime_log: "solver.log"
+
+run:
+  questions: null
+  limit: null
+  start_index: 0
+  include_trajectory: true
+  output_name: "solutions.jsonl"

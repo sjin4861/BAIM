@@ -1,3 +1,4 @@
+# Behavior-Aware Item Modeling via Dynamic Procedural Solution Representations for Knowledge Tracing
 <div align="center">
 
 <img src="baim_logo.png" alt="BAIM Logo" width="500">

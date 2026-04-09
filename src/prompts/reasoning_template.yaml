@@ -34,7 +34,7 @@ system_prompt: |
   }
   ```
 
-instruction_C: |
+instruction: |
   Simulate a **high-performing student**.
   Solve the following problem by strictly following Polya's 4-Stage Process correctly.
   

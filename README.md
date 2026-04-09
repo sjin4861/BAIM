@@ -2,12 +2,7 @@
 
 <img src="baim_logo.png" alt="BAIM Logo" width="500">
 
-<br>
-<br>
-
 ### 🔥 **Accepted to ACL Findings 2026!!!**
-
-<br>
 
 [Paper (Coming Soon)](#) | [Quick Start](#environment)
 

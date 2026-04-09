@@ -1,0 +1,32 @@
+dataset: "NIPS34"
+seed: 42
+
+io:
+  base: "data/embedding_trajectories/{dataset}"
+  mean_out: "embedding/{dataset}/polya_tensor_layer_mean.pt"
+  pca_out: "embedding/{dataset}/polya_tensor_layer_mean_pca768.pt"
+
+shape:
+  expected_d: 5120
+  expected_t: 0
+
+pca:
+  n_components: 768
+  random_state: 42
+  svd_solver: "auto"
+
+run:
+  start: 0
+  end: null
+  skip_bad: false
+  rebuild_mean: false
+
+stage_files:
+  - name: "understand.pt"
+    stage_id: 0
+  - name: "plan.pt"
+    stage_id: 1
+  - name: "carry_out.pt"
+    stage_id: 2
+  - name: "look_back.pt"
+    stage_id: 3

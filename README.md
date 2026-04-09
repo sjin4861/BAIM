@@ -84,3 +84,71 @@ Notes:
 ```bash
 export WANDB_API_KEY="<your_key>"
 ```
+
+## Reproduce BAIM Procedural Solution Representation
+
+This section is for users who want to reproduce BAIM's **procedural solution representation** pipeline:
+
+1. Extract per-problem procedural solutions and raw trajectories.
+2. Build stage-level embeddings by layer-wise mean pooling.
+3. Apply PCA only after embeddings from all problems are collected.
+
+### 1) Download Public Data
+
+Download datasets from the official public sources:
+
+- NIPS34: https://www.eedi.com/research
+- XES3G5M: https://github.com/ai4ed/XES3G5M.git
+
+Place metadata/question files under dataset roots as expected by config, for example:
+
+- `NIPS34/metadata/question_en.json`
+- `XES3G5M/metadata/questions_en.json`
+
+### 2) Prepare Image Roots
+
+Put images under each dataset image root (configured in `src/configs/extract.yaml`):
+
+- `NIPS34/metadata/images`
+- `XES3G5M/metadata/images`
+
+If a problem references images and files are missing, extraction will continue but those images are not used.
+
+### 3) Configure Extraction
+
+Edit `src/configs/extract.yaml`:
+
+- `dataset`: `NIPS34` or `XES3G5M`
+- `paths.images_root`: typically `{dataset}/metadata/images`
+- `run` section: `limit`, `start_index`, `include_trajectory`, `output_name` as needed
+
+Run extraction:
+
+```bash
+python src/extract.py --config src/configs/extract.yaml
+```
+
+This writes solution JSONL and per-problem raw trajectory `.pt` files under `paths.save_dir`.
+
+### 4) Configure Embedding Processing
+
+Edit `src/configs/process.yaml`:
+
+- `dataset`: `NIPS34` or `XES3G5M`
+- `io.base`: root directory containing per-index folders (`0`, `1`, ...), each with stage files (`understand.pt`, `plan.pt`, `carry_out.pt`, `look_back.pt`)
+- `shape`: expected embedding dimensions (`expected_d`) and optional fixed `expected_t`
+- `pca`: PCA hyperparameters (`n_components`, `svd_solver`, `random_state`)
+- `run`: index range and behavior (`start`, `end`, `skip_bad`, `rebuild_mean`)
+
+Run processing:
+
+```bash
+python src/process.py --config src/configs/process.yaml
+```
+
+Outputs:
+
+- Layer-mean stage tensor: `io.mean_out`
+- PCA-compressed stage tensor: `io.pca_out`
+
+The PCA step is applied after all selected problems are pooled and aggregated.

@@ -1,7 +1,17 @@
-
 # Behavior-Aware Item Modeling (BAIM)
 
-This repository contains BAIM (Behavior-Aware Item Modeling) models and utilities for building **precomputed multi-stage item embeddings** and training KT models that consume them.
+🔥 Accepted to ACL Findings 2026!!!
+
+## Overview
+
+![BAIM Overview](baim.png)
+
+BAIM (**Behavior-Aware Item Modeling**) introduces **procedural item representations** that model how problems are solved rather than treating items as static entities. Instead of learning a single embedding per item, BAIM decomposes each problem into multiple reasoning stages:
+- **Understand → Plan → Carry Out → Look Back**
+These stage-level representations are then dynamically integrated into KT models via **adaptive routing**, enabling: 
+- Better modeling of repeated interactions
+- Improved generalization across students
+- Strong performance across 5 KT backbones
 
 ## What's inside
 
@@ -42,6 +52,30 @@ The run scripts reference:
 - `EMB_PATH="../../../embedding/${DATASET}/polya_tensor_all_layers_mean_pca768.pt"`
 
 If you use a different dataset (e.g., `xes3g5m`), set `DATASET` accordingly or adjust folder names under `embedding/`.
+
+## Results (ACL Findings 2026)
+
+BAIM achieves consistent improvements across 5 KT backbones and 2 benchmark datasets.
+
+### XES3G5M
+
+| Model | AKT | qDKT | QIKT | simpleKT | sparseKT |
+|------|-----|------|------|----------|----------|
+| Default | 81.56±0.06 | 81.69±0.04 | 81.67±0.01 | 81.26±0.01 | 80.37±0.04 |
+| BAIM (Ours) | 83.00 (+1.44) | 82.43 (+0.74) | 82.17 (+0.50) | 82.84 (+1.58) | 83.21 (+2.84) |
+
+---
+
+### NIPS34
+
+| Model | AKT | qDKT | QIKT | simpleKT | sparseKT |
+|------|-----|------|------|----------|----------|
+| Default | 79.89±0.07 | 79.24±0.08 | 79.95±0.07 | 79.90±0.01 | 79.30±0.08 |
+| BAIM (Ours) | 80.16 (+0.27) | 80.13 (+0.89) | 80.18 (+0.23) | 80.02 (+0.12) | 80.36 (+1.06) |
+
+---
+
+For full details, see our paper.
 
 ## Training
 

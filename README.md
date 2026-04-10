@@ -5,8 +5,7 @@
 
 ### 🔥 **Accepted to ACL Findings 2026!!!**
 
-[Paper (Coming Soon)](#) | [Quick Start](#environment)
-
+[Paper](https://arxiv.org/abs/2604.08260) | [Quick Start](#environment)
 <hr>
 </div>
 
@@ -185,3 +184,18 @@ Outputs:
 - PCA-compressed stage tensor: `io.pca_out`
 
 The PCA step is applied after all selected problems are pooled and aggregated.
+
+---
+
+## Citation
+
+If you find this repository, dataset, or code useful for your research, please consider citing our paper.
+
+```bibtex
+@article{seo2026behavior,
+  title={Behavior-Aware Item Modeling via Dynamic Procedural Solution Representations for Knowledge Tracing},
+  author={Jun Seo and Sangwon Ryu and Heejin Do and Hyounghun Kim and Gary Geunbae Lee},
+  journal={arXiv preprint arXiv:2604.08260},
+  year={2026}
+}
+```

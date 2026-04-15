@@ -194,7 +194,7 @@ If you find this repository, dataset, or code useful for your research, please c
 ```bibtex
 @article{seo2026behavior,
   title={Behavior-Aware Item Modeling via Dynamic Procedural Solution Representations for Knowledge Tracing},
-  author={Jun Seo and Sangwon Ryu and Heejin Do and Hyounghun Kim and Gary Geunbae Lee},
+  author={Seo, Jun and Ryu, Sangwon and Do, Heejin and Kim, Hyounghun and Lee, Gary Geunbae},
   journal={arXiv preprint arXiv:2604.08260},
   year={2026}
 }
